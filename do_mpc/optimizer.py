@@ -32,7 +32,7 @@ import warnings
 from do_mpc.tools.indexedproperty import IndexedProperty
 
 
-class Optimizer:
+class Optimizer(IndexedProperty):
     """The base clase for the optimization based state estimation (MHE) and predictive controller (MPC).
     This class establishes the jointly used attributes, methods and properties.
 
@@ -41,9 +41,9 @@ class Optimizer:
         The ``Optimizer`` base class can not be used independently.
 
     """
+
     def __init__(self):
         assert 'model' in self.__dict__.keys(), 'Cannot initialize the optimizer before assigning the model to the current class instance.'
-
 
         # Initialize structures for bounds, scaling, initial values by calling the symbolic structures defined in the model
         # with the default numerical value.
@@ -61,17 +61,16 @@ class Optimizer:
         self._x_scaling = self.model._x(1.0)
         self._u_scaling = self.model._u(1.0)
         self._z_scaling = self.model._z(1.0)
-        self._p_scaling = self.model._p(1.0) # only meaningful for MHE.
+        self._p_scaling = self.model._p(1.0)  # only meaningful for MHE.
 
         # Lists for further non-linear constraints (optional). Constraints are formulated as cons < ub
         self.nl_cons_list = [
             {'expr_name': 'default', 'expr': DM(), 'ub': DM()}
         ]
         self.slack_vars_list = [
-            {'slack_name': 'default', 'var':SX.sym('default',(0,0)), 'ub': DM()}
+            {'slack_name': 'default', 'var': SX.sym('default', (0, 0)), 'ub': DM()}
         ]
         self.slack_cost = 0
-
 
     @IndexedProperty
     def bounds(self, ind):
@@ -103,10 +102,10 @@ class Optimizer:
 
         """
         assert isinstance(ind, tuple), 'Power index must include bound_type, var_type, var_name (as a tuple).'
-        assert len(ind)>=3, 'Power index must include bound_type, var_type, var_name (as a tuple).'
+        assert len(ind) >= 3, 'Power index must include bound_type, var_type, var_name (as a tuple).'
         bound_type = ind[0]
-        var_type   = ind[1]
-        var_name   = ind[2:]
+        var_type = ind[1]
+        var_name = ind[2:]
 
         err_msg = 'Invalid power index {} for bound_type. Must be from (lower, upper).'
         assert bound_type in ('lower', 'upper'), err_msg.format(bound_type)
@@ -132,10 +131,10 @@ class Optimizer:
         """See Docstring for bounds getter method"""
 
         assert isinstance(ind, tuple), 'Power index must include bound_type, var_type, var_name (as a tuple).'
-        assert len(ind)>=3, 'Power index must include bound_type, var_type, var_name (as a tuple).'
+        assert len(ind) >= 3, 'Power index must include bound_type, var_type, var_name (as a tuple).'
         bound_type = ind[0]
-        var_type   = ind[1]
-        var_name   = ind[2:]
+        var_type = ind[1]
+        var_name = ind[2:]
 
         err_msg = 'Invalid power index {} for bound_type. Must be from (lower, upper).'
         assert bound_type in ('lower', 'upper'), err_msg.format(bound_type)
@@ -156,7 +155,6 @@ class Optimizer:
 
         # Set value on struct:
         var_struct[var_name] = val
-
 
     @IndexedProperty
     def scaling(self, ind):
@@ -203,9 +201,9 @@ class Optimizer:
 
         """
         assert isinstance(ind, tuple), 'Power index must include bound_type, var_type, var_name (as a tuple).'
-        assert len(ind)>=2, 'Power index must include bound_type, var_type, var_name (as a tuple).'
-        var_type   = ind[0]
-        var_name   = ind[1:]
+        assert len(ind) >= 2, 'Power index must include bound_type, var_type, var_name (as a tuple).'
+        var_type = ind[0]
+        var_name = ind[1:]
 
         err_msg = 'Invalid power index {} for var_type. Must be from (_x, states, _u, inputs, _z, algebraic).'
         assert var_type in ('_x', '_u', '_z', '_p_est'), err_msg.format(var_type)
@@ -221,14 +219,13 @@ class Optimizer:
 
         return var_struct[var_name]
 
-
     @scaling.setter
     def scaling(self, ind, val):
         """See Docstring for scaling getter method"""
         assert isinstance(ind, tuple), 'Power index must include bound_type, var_type, var_name (as a tuple).'
-        assert len(ind)>=2, 'Power index must include bound_type, var_type, var_name (as a tuple).'
-        var_type   = ind[0]
-        var_name   = ind[1:]
+        assert len(ind) >= 2, 'Power index must include bound_type, var_type, var_name (as a tuple).'
+        var_type = ind[0]
+        var_name = ind[1:]
 
         err_msg = 'Invalid power index {} for var_type. Must be from (_x, states, _u, inputs, _z, algebraic).'
         assert var_type in ('_x', '_u', '_z', '_p_est'), err_msg.format(var_type)
@@ -323,21 +320,20 @@ class Optimizer:
         assert isinstance(ub, (int, float, np.ndarray)), 'ub must be float, int or numpy.ndarray, you have: {}'.format(type(ub))
         assert isinstance(soft_constraint, bool), 'soft_constraint must be boolean, you have: {}'.format(type(soft_constraint))
 
-        if soft_constraint==True:
+        if soft_constraint == True:
             # Introduce new slack variable:
-            epsilon = SX.sym('eps_'+expr_name,*expr.shape)
+            epsilon = SX.sym('eps_' + expr_name, *expr.shape)
             # Change expression
-            expr = expr-epsilon
+            expr = expr - epsilon
             # Add slack variable to list of slack variables:
             self.slack_vars_list.extend([
                 {'slack_name': expr_name, 'var': epsilon, 'ub': maximum_violation}
             ])
             # Add cost contribution:
-            self.slack_cost += sum1(penalty_term_cons*epsilon)
-
+            self.slack_cost += sum1(penalty_term_cons * epsilon)
 
         self.nl_cons_list.extend([
-            {'expr_name': expr_name, 'expr': expr, 'ub' : ub}])
+            {'expr_name': expr_name, 'expr': expr, 'ub': ub}])
 
         return expr
 
@@ -376,7 +372,6 @@ class Optimizer:
         # Set bounds:
         for nl_cons_i in self.nl_cons_list:
             self._nl_cons_ub[nl_cons_i['expr_name']] = nl_cons_i['ub']
-
 
     def get_tvp_template(self):
         """Obtain output template for :py:func:`set_tvp_fun`.
@@ -418,7 +413,7 @@ class Optimizer:
         """
 
         tvp_template = struct_symSX([
-            entry('_tvp', repeat=self.n_horizon+1, struct=self.model._tvp)
+            entry('_tvp', repeat=self.n_horizon + 1, struct=self.model._tvp)
         ])
         return tvp_template(0)
 
@@ -496,11 +491,17 @@ class Optimizer:
         """
         assert self.flags['setup'] == True, 'optimizer was not setup yet. Please call optimizer.setup().'
 
+        # print(";;;;;;;;;;;;;;;;;")
+        # print("self.lb_opt_x")
+        # print(self.lb_opt_x)
+        # print("not haga hua")
+        # print(";;;;;;;;;;;;;;;;;")
+        # exit()
         r = self.S(x0=self.opt_x_num, lbx=self.lb_opt_x, ubx=self.ub_opt_x,
-            ubg=self.cons_ub, lbg=self.cons_lb, p=self.opt_p_num)
+                   ubg=self.cons_ub, lbg=self.cons_lb, p=self.opt_p_num)
         # Note: .master accesses the underlying vector of the structure.
         self.opt_x_num.master = r['x']
-        self.opt_x_num_unscaled.master = r['x']*self.opt_x_scaling
+        self.opt_x_num_unscaled.master = r['x'] * self.opt_x_scaling
         self.opt_g_num = r['g']
         # Values of lagrange multipliers:
         self.lam_g_num = r['lam_g']
@@ -508,10 +509,11 @@ class Optimizer:
         self.solver_stats = self.S.stats()
 
         # Calculate values of auxiliary expressions (defined in model)
+
         self.opt_aux_num.master = self.opt_aux_expression_fun(
-                self.opt_x_num,
-                self.opt_p_num
-            )
+            self.opt_x_num,
+            self.opt_p_num
+        )
 
     def _setup_discretization(self):
         """Private method that creates the discretization for the optimizer (MHE or MPC).
@@ -530,23 +532,23 @@ class Optimizer:
         """
         _x, _u, _z, _tvp, _p, _w = self.model['x', 'u', 'z', 'tvp', 'p', 'w']
 
-        rhs = substitute(self.model._rhs, _x, _x*self._x_scaling.cat)
-        rhs = substitute(rhs, _u, _u*self._u_scaling.cat)
-        rhs = substitute(rhs, _z, _z*self._z_scaling.cat)
-        rhs = substitute(rhs, _p, _p*self._p_scaling.cat) # only meaningful for MHE.
+        rhs = substitute(self.model._rhs, _x, _x * self._x_scaling.cat)
+        rhs = substitute(rhs, _u, _u * self._u_scaling.cat)
+        rhs = substitute(rhs, _z, _z * self._z_scaling.cat)
+        rhs = substitute(rhs, _p, _p * self._p_scaling.cat)  # only meaningful for MHE.
 
-        alg = substitute(self.model._alg, _x, _x*self._x_scaling.cat)
-        alg = substitute(alg, _u, _u*self._u_scaling.cat)
-        alg = substitute(alg, _z, _z*self._z_scaling.cat)
-        alg = substitute(alg, _p, _p*self._p_scaling.cat) # only meaningful for MHE.
+        alg = substitute(self.model._alg, _x, _x * self._x_scaling.cat)
+        alg = substitute(alg, _u, _u * self._u_scaling.cat)
+        alg = substitute(alg, _z, _z * self._z_scaling.cat)
+        alg = substitute(alg, _p, _p * self._p_scaling.cat)  # only meaningful for MHE.
 
         if self.state_discretization == 'discrete':
             _i = SX.sym('i', 0)
             # discrete integrator ifcs mimics the API the collocation ifcn.
-            ifcn = Function('ifcn', [_x, _i, _u, _z, _tvp, _p, _w], [alg, rhs/self._x_scaling.cat])
+            ifcn = Function('ifcn', [_x, _i, _u, _z, _tvp, _p, _w], [alg, rhs / self._x_scaling.cat])
             n_total_coll_points = 0
         if self.state_discretization == 'collocation':
-            ffcn = Function('ffcn', [_x, _u, _z, _tvp, _p, _w], [rhs/self._x_scaling.cat])
+            ffcn = Function('ffcn', [_x, _u, _z, _tvp, _p, _w], [rhs / self._x_scaling.cat])
             afcn = Function('afcn', [_x, _u, _z, _tvp, _p, _w], [alg])
             # Get collocation information
             coll = self.collocation_type
@@ -620,7 +622,7 @@ class Optimizer:
             offset = 0
 
             # Algebraic trajectory
-            n_zk = ni * (deg +1) * n_z
+            n_zk = ni * (deg + 1) * n_z
             zk = SX.sym("zk", n_zk)
             offset_z = 0
             zk_split = np.resize(np.array([], dtype=SX), (ni, deg + 1))
@@ -657,7 +659,7 @@ class Optimizer:
             # For all finite elements
             for i in range(ni):
                 # for the first point:
-                a_i0 = afcn(ik_split[i, 0], uk, zk_split[i,0], tv_pk, pk, wk)
+                a_i0 = afcn(ik_split[i, 0], uk, zk_split[i, 0], tv_pk, pk, wk)
                 gk.append(a_i0)
                 lbgk.append(np.zeros(n_z))
                 ubgk.append(np.zeros(n_z))
@@ -670,17 +672,16 @@ class Optimizer:
                         xp_ij += C[r, j] * ik_split[i, r]
 
                     # Add collocation equations to the NLP
-                    f_ij = ffcn(ik_split[i, j], uk, zk_split[i,j], tv_pk, pk, wk)
+                    f_ij = ffcn(ik_split[i, j], uk, zk_split[i, j], tv_pk, pk, wk)
                     gk.append(h * f_ij - xp_ij)
                     lbgk.append(np.zeros(n_x))  # equality constraints
                     ubgk.append(np.zeros(n_x))  # equality constraints
 
                     # algebraic constraints
-                    a_ij = afcn(ik_split[i, j], uk, zk_split[i,j], tv_pk, pk, wk)
+                    a_ij = afcn(ik_split[i, j], uk, zk_split[i, j], tv_pk, pk, wk)
                     gk.append(a_ij)
                     lbgk.append(np.zeros(n_z))
                     ubgk.append(np.zeros(n_z))
-
 
                 # Get an expression for the state at the end of the finite element
                 xf_i = 0
@@ -738,7 +739,7 @@ class Optimizer:
                 for b in range(n_branches[k]):
                     child_scenario[k][s][b] = scenario_counter
                     structure_scenario[k][scenario_counter] = s
-                    structure_scenario[k+1][scenario_counter] = s
+                    structure_scenario[k + 1][scenario_counter] = s
                     parent_scenario[k + 1][scenario_counter] = s
                     scenario_counter += 1
                 # Store the range of branches

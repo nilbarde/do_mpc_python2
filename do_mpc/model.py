@@ -25,9 +25,10 @@ from casadi import *
 from casadi.tools import *
 import pdb
 import warnings
+from do_mpc.tools.indexedproperty import IndexedProperty
 
 
-class IteratedVariables:
+class IteratedVariables(IndexedProperty):
     """ Class to initiate properties and attributes for iterated variables.
     This class is inherited to all iterating **do-mpc** classes and based on the :py:class:`Model`.
 
@@ -44,7 +45,6 @@ class IteratedVariables:
         self._u0 = self.model._u(0.0)
         self._z0 = self.model._z(0.0)
         self._t0 = np.array([0.0])
-
 
     def _convert2struct(self, val, struct):
         """ Convert array to structure.
@@ -201,8 +201,8 @@ class IteratedVariables:
         return self._t0
 
     @t0.setter
-    def t0(self,val):
-        if isinstance(val, (int,float)):
+    def t0(self, val):
+        if isinstance(val, (int, float)):
             self._t0 = np.array([val])
         elif isinstance(val, np.ndarray):
             assert val.size == 1, 'Cant set time with shape {}. Must contain exactly one element.'.format(val.size)
@@ -215,7 +215,7 @@ class IteratedVariables:
             raise Exception('Passing object of type {} to set the current time. Must be of type {}'.format(type(val), types))
 
 
-class Model:
+class Model(IndexedProperty):
     """The **do-mpc** model class. This class holds the full model description and is at the core of
     :py:class:`do_mpc.simulator.Simulator`, :py:class:`do_mpc.controller.MPC` and :py:class:`do_mpc.estimator.Estimator`.
     The :py:class:`Model` class is created with setting the ``model_type`` (continuous or discrete).
@@ -272,25 +272,24 @@ class Model:
 
         self._x = []
 
-        self._u =   [entry('default', shape=(0,0))]
+        self._u = [entry('default', shape=(0, 0))]
 
-        self._z =   [entry('default', shape=(0,0))]
+        self._z = [entry('default', shape=(0, 0))]
 
-        self._p =   [entry('default', shape=(0,0))]
+        self._p = [entry('default', shape=(0, 0))]
 
-        self._tvp = [entry('default', shape=(0,0))]
+        self._tvp = [entry('default', shape=(0, 0))]
 
-        self._aux = [entry('default', shape=(1,1))]
+        self._aux = [entry('default', shape=(1, 1))]
         self._aux_expression = [entry('default', expr=DM(0))]
 
-        self._y =   [entry('default', shape=(0,0))]
+        self._y = [entry('default', shape=(0, 0))]
         self._y_expression = []
 
         # Process noise
-        self._w = [entry('default', shape=(0,0))]
+        self._w = [entry('default', shape=(0, 0))]
         # Measurement noise
-        self._v = [entry('default', shape=(0,0))]
-
+        self._v = [entry('default', shape=(0, 0))]
 
         self.model_type = model_type
         self.symvar_type = 'SX'
@@ -319,7 +318,7 @@ class Model:
 
             x, u, z = model['x','u','z']
         """
-        var_names = ['x','u','z','p','tvp','y','aux', 'w']
+        var_names = ['x', 'u', 'z', 'p', 'tvp', 'y', 'aux', 'w']
         if isinstance(ind, tuple):
             val = []
             for ind_i in ind:
@@ -327,7 +326,7 @@ class Model:
                 val.append(getattr(self, ind_i))
             return val
         else:
-            val = getattr(self,ind)
+            val = getattr(self, ind)
 
         return val
 
@@ -341,7 +340,6 @@ class Model:
             return struct_symSX(getattr(self, var_name))
         else:
             raise Exception('Cannot query variables in MX mode before calling Model.setup.')
-
 
     @property
     def x(self):
@@ -635,7 +633,6 @@ class Model:
         def w(self, val):
             raise Exception('Cannot set process noise directly.')
 
-
     @property
     def v(self):
         """ Measurement noise.
@@ -665,8 +662,7 @@ class Model:
         def v(self, val):
             raise Exception('Cannot set measurement noise directly.')
 
-
-    def set_variable(self, var_type, var_name, shape=(1,1)):
+    def set_variable(self, var_type, var_name, shape=(1, 1)):
         """Introduce new variables to the model class. Define variable type, name and shape (optional).
 
         **Example:**
@@ -713,19 +709,19 @@ class Model:
         assert self.flags['setup'] == False, 'Cannot call .set_variable after setup.'
         assert isinstance(var_type, str), 'var_type must be str, you have: {}'.format(type(var_type))
         assert isinstance(var_name, str), 'var_name must be str, you have: {}'.format(type(var_name))
-        assert isinstance(shape, (tuple,int)), 'shape must be tuple or int, you have: {}'.format(type(shape))
+        assert isinstance(shape, (tuple, int)), 'shape must be tuple or int, you have: {}'.format(type(shape))
 
         # Get short names:
-        var_type =var_type.replace('states', '_x'
-            ).replace('inputs', '_u'
-            ).replace('algebraic', '_z'
-            ).replace('parameter', '_p'
-            ).replace('timevarying_parameter', '_tvp')
+        var_type = var_type.replace('states', '_x'
+                                    ).replace('inputs', '_u'
+                                              ).replace('algebraic', '_z'
+                                                        ).replace('parameter', '_p'
+                                                                  ).replace('timevarying_parameter', '_tvp')
 
         # Check validity of var_type:
-        assert var_type in ['_x','_u','_z','_p','_tvp'], 'Trying to set non-existing variable var_type: {} with var_name {}'.format(var_type, var_name)
+        assert var_type in ['_x', '_u', '_z', '_p', '_tvp'], 'Trying to set non-existing variable var_type: {} with var_name {}'.format(var_type, var_name)
         # Check validity of var_name:
-        assert var_name not in [entry_i.name for entry_i in getattr(self,var_type)], 'The variable name {} for type {} already exists.'.format(var_name, var_type)
+        assert var_name not in [entry_i.name for entry_i in getattr(self, var_type)], 'The variable name {} for type {} already exists.'.format(var_name, var_type)
         # Create variable:
         var = SX.sym(var_name, shape)
 
@@ -772,7 +768,7 @@ class Model:
         assert isinstance(expr_name, str), 'expr_name must be str, you have: {}'.format(type(expr_name))
         assert isinstance(expr, (casadi.SX, casadi.MX)), 'expr must be a casadi SX or MX type, you have:{}'.format(type(expr))
 
-        self._aux_expression.append(entry(expr_name, expr = expr))
+        self._aux_expression.append(entry(expr_name, expr=expr))
         self._aux.append(entry(expr_name, shape=expr.shape))
 
         return expr
@@ -844,11 +840,11 @@ class Model:
 
         # Create a new process noise variable and add it to the rhs equation.
         if meas_noise:
-            var = SX.sym(meas_name+'_noise', expr.shape[0])
+            var = SX.sym(meas_name + '_noise', expr.shape[0])
             self._v.append(entry(meas_name, sym=var))
             expr += var
 
-        self._y_expression.append(entry(meas_name, expr = expr))
+        self._y_expression.append(entry(meas_name, expr=expr))
         self._y.append(entry(meas_name, shape=expr.shape))
 
         return expr
@@ -911,7 +907,7 @@ class Model:
 
         # Create a new process noise variable and add it to the rhs equation.
         if process_noise:
-            var = SX.sym(var_name+'_noise', expr.shape[0])
+            var = SX.sym(var_name + '_noise', expr.shape[0])
             self._w.append(entry(var_name, sym=var))
             expr += var
         self.rhs_list.extend([{'var_name': var_name, 'expr': expr}])
@@ -948,8 +944,7 @@ class Model:
         assert isinstance(expr_name, str), 'expr_name must be str, you have: {}'.format(type(expr_name))
         assert isinstance(expr, (casadi.SX, casadi.MX, casadi.DM)), 'expr must be a casadi SX, MX or DM type, you have:{}'.format(type(expr))
 
-        self.alg_list.append(entry(expr_name, expr = expr))
-
+        self.alg_list.append(entry(expr_name, expr=expr))
 
     def setup(self):
         """Setup method must be called to finalize the modelling process.
@@ -973,10 +968,10 @@ class Model:
         self._x = _x = struct_symSX(self._x)
         self._w = _w = struct_symSX(self._w)
         self._v = _v = struct_symSX(self._v)
-        self._u = _u =  struct_symSX(self._u)
+        self._u = _u = struct_symSX(self._u)
         self._z = _z = struct_symSX(self._z)
         self._p = _p = struct_symSX(self._p)
-        self._tvp = _tvp =  struct_symSX(self._tvp)
+        self._tvp = _tvp = struct_symSX(self._tvp)
 
         # Write self._aux_expression.
         self._aux_expression = struct_SX(self._aux_expression)
@@ -992,7 +987,6 @@ class Model:
 
         # Create alg equations:
         self._alg = struct_SX(self.alg_list)
-
 
         # Create mutable struct_SX with identical structure as self._x to hold the right hand side.
         self._rhs = struct_SX(self._x)

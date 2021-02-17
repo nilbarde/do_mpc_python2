@@ -31,7 +31,10 @@ import do_mpc.data
 import do_mpc.optimizer
 from do_mpc.tools.indexedproperty import IndexedProperty
 
-class MPC(do_mpc.optimizer.Optimizer, do_mpc.model.IteratedVariables):
+from functools import wraps
+
+
+class MPC(do_mpc.optimizer.Optimizer, do_mpc.model.IteratedVariables, IndexedProperty):
     """Model predictive controller.
 
     For general information on model predictive control, please read our `background article`_.
@@ -204,6 +207,9 @@ class MPC(do_mpc.optimizer.Optimizer, do_mpc.model.IteratedVariables):
 
     @opt_x_num.setter
     def opt_x_num(self, val):
+        print("]]]]]]]]]]]]]]")
+        print(val)
+        print("]]]]]]]]]]]]]]")
         self._opt_x_num = val
 
     @property
@@ -841,6 +847,8 @@ class MPC(do_mpc.optimizer.Optimizer, do_mpc.model.IteratedVariables):
         """
         assert self.flags['setup'] == True, 'MPC was not setup yet. Please call MPC.setup().'
 
+        print(self._x_scaling)
+        print("///////////")
         self.opt_x_num['_x'] = self._x0.cat/self._x_scaling
         self.opt_x_num['_u'] = self._u0.cat/self._u_scaling
         self.opt_x_num['_z'] = self._z0.cat/self._z_scaling
