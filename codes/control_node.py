@@ -1,14 +1,14 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-# import rospy
-# from std_msgs.msg import Float32
+import rospy
+from std_msgs.msg import Float32
+from collections import deque
 import numpy as np
 import sys
 sys.path.append('../../')
 import do_mpc
 from casadi import *
 import matplotlib.pyplot as plt
-import csv
 
 def get_bezier_coef(points):
     n = len(points) - 1
@@ -62,7 +62,7 @@ def trajectory_gen(points):
     A,B=get_bezier_coef(points)
     return [get_cubic(points[i],A[i],B[i],points[i+1]) for i in range(len(points)-1)]
 
-def control(x_0,i,x,y,vel,theta,points,curves,derivatives,velocities):
+def control(x_0,i,x,y,vel,points,curves,derivatives,velocities,acc_pub,steer_rate_pub):
     model_type='discrete'
     model=do_mpc.model.Model(model_type)
     J=1000
@@ -95,7 +95,7 @@ def control(x_0,i,x,y,vel,theta,points,curves,derivatives,velocities):
     #model.set_expression(expr_name='cost', expr=sum1((xc-fn(psi)[0])**2+100*(yc-fn(psi)[1])**2+100*theta**2+200*(np.tan(theta)-d(psi)[1]/d(psi)[0])**2
                                                      #+a_s**2+w_s**2+(v-0.9*vmax_i)**2))
     model.set_expression(expr_name='cost', expr=sum1((xc-fn(psi)[0])**2+100*(yc-fn(psi)[1])**2+100*theta**2+200*(np.tan(theta)-d(psi)[1]/d(psi)[0])**2
-                                                    +a_s**2+w_s**2)+(v-0.8*velocities[i+1])**2)
+                                                     +a_s**2+w_s**2)+(v-0.8*velocities[i+1])**2)
     state_now=vertcat(psi,xc, yc, v, theta, phi, delta,a_s,w_s)
     #B=t_s*vertcat((0.9*vmax_i)/((d(psi)[0])**2+(d(psi)[1])**2)**0.5,v*np.cos(theta), v*np.sin(theta), a* np.cos(delta)-(2.0/m)*Fyf*np.sin(delta), phi,
      #             (1.0/J)*(La*(m*a*np.sin(delta)+2*Fyf*np.cos(delta))-2*Lb*Fyr), omega,(1/t_s)*(a-a_s),(1/t_s)*(omega-w_s))
@@ -166,6 +166,8 @@ def control(x_0,i,x,y,vel,theta,points,curves,derivatives,velocities):
     N_u=N
     for j in range(N_u):
         u0=mpc.make_step(x_0)
+        acc_pub.publish(u0[0][0])
+        steer_rate_pub.publish(u0[1][0])
         x_0=simulator.make_step(u0)
         # with open('control_outputs.csv',mode='a') as op_file:
         #     op=csv.writer(op_file,delimiter=',')
@@ -180,25 +182,17 @@ def control(x_0,i,x,y,vel,theta,points,curves,derivatives,velocities):
     vel=vertcat(vel,simulator.data['_x','v',-1])
     #z=vertcat(z,simulator.data['_x','theta',-1])
     if x_0[1]>=points[i+1][0]:
-        return x_0,x,y,vel,theta
+        return x_0,x,y,vel
     else:
         #x_0=simulator.data['_x'][-1]
-        return control(x_0,i,x,y,vel,theta,points,curves,derivatives,velocities)
+        return control(x_0,i,x,y,vel,points,curves,derivatives,velocities,acc_pub,steer_rate_pub)
 
 
 points=np.zeros((30,2))
 velocities=np.zeros((30,1))
-# with open("max_vel.csv") as csv_file:
-#  csv_reader=csv.reader(csv_file)
-#  j=0
-#  for row in csv_reader:
-#    velocities[j][0]=float(row[0])
-#    j+=1
-#    if j>=30:
-#      break
-for j in range(30):
-    velocities[j][0]=1.5
-with open("coordinates.csv") as csv_file:
+#for j in range(30):
+ #   velocities[j][0]=1.5
+'''with open("coordinates.csv") as csv_file:
   csv_reader=csv.reader(csv_file,delimiter=',')
   j=0
   for row in csv_reader:
@@ -209,8 +203,67 @@ with open("coordinates.csv") as csv_file:
      points[j][1]=float(row[0])-offset_y
      j+=1
      if j>=30:
-       break
-bcurves=trajectory_gen(points)
+       break'''
+x_dq=deque([])
+y_dq=deque([])
+v_dq=deque([])
+x_l=[]
+y_l=[]
+x_p=[]
+y_p=[]
+def x_callback(x_c):
+    x_dq.append(x_c.data)
+    x_l.append(x_c.data)
+
+def y_callback(y_c):
+    y_dq.append(y_c.data)
+    y_l.append(y_c.data)
+
+def v_callback(v_max):
+    v_dq.append(v_max.data)
+
+def move_forward(x_0,acc_pub,steer_rate_pub):
+    for j in range(30):
+        points[j][0]=x_dq[j]-x_l[0]
+        points[j][1]=y_dq[j]-y_l[0]
+        velocities[j][0]=v_dq[j]
+    bcurves=trajectory_gen(points)
+    derivatives=derivative_list(points)
+    #t_i=np.arctan(derivatives[0](0)[1]/derivatives[0](0)[0])
+    #x_0=np.array([[0],[points[0][0]],[points[0][1]],[1.5],[t_i],[0],[0],[0],[0]])
+    x=np.array(x_0[1])
+    y=np.array(x_0[2])
+    v=np.array(x_0[3])
+    (x_0,x,y,v)=control(x_0,0,x,y,v,points,bcurves,derivatives,velocities,acc_pub,steer_rate_pub)
+    x_dq.popleft()
+    y_dq.popleft()
+    v_dq.popleft()
+    return x_0,x,y,v,points[0][0],points[0][1]
+
+x_0=np.array([[0],[points[0][0]],[points[0][1]],[1.5],[0],[0],[0],[0],[0]]) #assuming initially straight path
+x_=np.array([0])
+y_=np.array([0])
+rospy.init_node('control_node', anonymous=True)
+acc_pub = rospy.Publisher('acceleration', Float32, queue_size=10)
+steer_rate_pub = rospy.Publisher('steer_rate', Float32, queue_size=10)
+rate=rospy.Rate(10)
+while not rospy.is_shutdown():
+    rospy.Subscriber("x_c",Float32,x_callback)
+    rospy.Subscriber("y_c",Float32,y_callback)
+    rospy.Subscriber("v_max",Float32,v_callback)
+    if len(x_dq)>=30 and len(y_dq)>=30:
+        x_0,x,y,v,xp,yp=move_forward(x_0,acc_pub,steer_rate_pub)
+        x_=vertcat(x_,x)
+        x_p.append(xp)
+        y_=vertcat(y_,y)
+        y_p.append(yp)
+    rate.sleep()
+plt.plot(x_,y_)
+plt.scatter(x_p,y_p)
+plt.show()
+
+
+'''bcurves=trajectory_gen(points)
 derivatives=derivative_list(points)
 t_i=np.arctan(derivatives[0](0)[1]/derivatives[0](0)[0])
 x_0=np.array([[0],[points[0][0]],[points[0][1]],[1.9],[t_i],[0],[0],[0],[0]])
@@ -219,32 +272,11 @@ y=np.array([points[0][1]])
 v=np.array([1.9])
 theta=np.array([t_i])
 
-# def control_output():
-#     acc_pub = rospy.Publisher('acceleration', Float32, queue_size=10)
-#     steer_rate_pub = rospy.Publisher('steer_rate', Float32, queue_size=10)
-#     rospy.init_node('control_node', anonymous=True)
-#     rate = rospy.Rate(10) # 10hz
-#     while not rospy.is_shutdown():      
-#         acc=float(u0[0][0])
-#         sa_r=float(u0[1][0])
-#         acc_pub.publish(acc)
-#         steer_rate_pub.publish(sa_r)
-#         rate.sleep()
 
 for i in range(len(points)-1):
     (x_0,x,y,v,theta)=control(x_0,i,x,y,v,theta,points,bcurves,derivatives,velocities)
     x_0[0]=0
 path=evaluate_bezier(points,50) 
-
-# if __name__ == '__main__':
-#     try:
-#         for i in range(len(points)-1):
-#             (x_0,x,y,v,theta)=control(x_0,i,x,y,v,theta,points,bcurves,derivatives,velocities)
-#             x_0[0]=0
-#         path=evaluate_bezier(points,50)
-#         control_output()
-#     except rospy.ROSInterruptException:
-#         pass
 px=path[:,0]
 py=path[:,1]
 fig,(ax1,ax2)=plt.subplots(2,1,sharex=True)
@@ -258,17 +290,52 @@ ax2.plot(points[:,0],velocities[:,0],'ro')
 ax2.plot(points[:,0],0.8*velocities[:,0],'bo')
 ax1.set(xlabel='x',ylabel='y')
 ax2.set(xlabel='x',ylabel='v')
-plt.show()
-s=x.size()[0]-1
-t=np.linspace(0,(s-1)*0.1,s)
-fig2,ax=plt.subplots(4,1,sharex=True)
-ax[0].plot(t,x[1:])
-ax[1].plot(t,y[1:])
-ax[2].plot(t,v[1:])
-ax[3].plot(t,theta[1:])
-ax[0].set_ylabel('xc')
-ax[1].set_ylabel('yc')
-ax[2].set_ylabel('v')
-ax[3].set_ylabel('theta')
-ax[3].set_xlabel('t')
-plt.show()
+plt.show()'''
+
+# if __name__ == '__main__':
+#     try:
+#         for i in range(len(points)-1):
+#             (x_0,x,y,v,theta)=control(x_0,i,x,y,v,theta,points,bcurves,derivatives,velocities)
+#             x_0[0]=0
+#         path=evaluate_bezier(points,50)
+#         control_output()
+#     except rospy.ROSInterruptException:
+#         pass
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+'''def control_output():
+    acc_pub = rospy.Publisher('acceleration', Float32, queue_size=10)
+    steer_rate_pub = rospy.Publisher('steer_rate', Float32, queue_size=10)
+    rospy.init_node('control_node', anonymous=True)
+    rate = rospy.Rate(10) # 10hz
+    while not rospy.is_shutdown():
+        with open('control_outputs.csv','r') as read_file:
+            reader=csv.reader(read_file,delimiter=',')
+            for row in reader:
+                acc=float(row[0])
+                sa_r=float(row[1])
+                acc_pub.publish(acc)
+                steer_rate_pub.publish(sa_r)
+                rate.sleep()
+
+if __name__ == '__main__':
+    try:
+        control_output()
+    except rospy.ROSInterruptException:
+        pass'''
