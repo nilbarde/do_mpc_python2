@@ -1,7 +1,11 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import rospy
+from std_msgs.msg import Float32MultiArray
 from std_msgs.msg import Float32
+from geometry_msgs.msg import PoseStamped
+from nav_msgs.msg import OccupancyGrid
+from nav_msgs.msg import Path
 from collections import deque
 import numpy as np
 import sys
@@ -187,9 +191,8 @@ def control(x_0,i,x,y,vel,points,curves,derivatives,velocities,acc_pub,steer_rat
         #x_0=simulator.data['_x'][-1]
         return control(x_0,i,x,y,vel,points,curves,derivatives,velocities,acc_pub,steer_rate_pub)
 
-
-points=np.zeros((30,2))
-velocities=np.zeros((30,1))
+x_path=[]
+y_path=[]
 #for j in range(30):
  #   velocities[j][0]=1.5
 '''with open("coordinates.csv") as csv_file:
@@ -204,24 +207,21 @@ velocities=np.zeros((30,1))
      j+=1
      if j>=30:
        break'''
-x_dq=deque([])
-y_dq=deque([])
-v_dq=deque([])
-x_l=[]
-y_l=[]
-x_p=[]
-y_p=[]
 def x_callback(x_c):
-    x_dq.append(x_c.data)
-    x_l.append(x_c.data)
+    for i in range(len(x_c.data)):
+        x_path.append(x_c.data[i])
+        if len(x_path)>1:
+            if x_path[0]==x_c.data[i]:
+                x_sub.unregister()
+                y_sub.unregister()
 
 def y_callback(y_c):
-    y_dq.append(y_c.data)
-    y_l.append(y_c.data)
+    for i in range(len(y_c.data)):
+        y_path.append(y_c.data[i])
 
-def v_callback(v_max):
-    v_dq.append(v_max.data)
-
+#def v_callback(v_max):
+ #   v_dq.append(v_max.data)
+'''
 def move_forward(x_0,acc_pub,steer_rate_pub):
     for j in range(30):
         points[j][0]=x_dq[j]-x_l[0]
@@ -238,29 +238,57 @@ def move_forward(x_0,acc_pub,steer_rate_pub):
     x_dq.popleft()
     y_dq.popleft()
     v_dq.popleft()
-    return x_0,x,y,v,points[0][0],points[0][1]
+    return x_0,x,y,v,points[0][0],points[0][1]'''
+x_0=np.array([[0],[0],[0],[1.5],[0],[0],[0],[0],[0]])
+def path_callback(path,x_0):
+    l=len(path.poses)
+    points=np.zeros((l,2))
+    velocities=np.zeros((l))
+    for j in range(l):
+        points[j][0]=path.poses[j].pose.position.y-path.poses[0].pose.position.y
+        points[j][1]=path.poses[j].pose.position.x-path.poses[0].pose.position.x
+        velocities[j]=1.5
+    x_=np.array([x_0[1]])
+    y_=np.array([x_0[2]])
+    v=np.array([x_0[3]])
+    bcurves=trajectory_gen(points)
+    derivatives=derivative_list(points)
+    for i in range(len(points)-1):
+        (x_0,x_,y_,v)=control(x_0,i,x_,y_,v,points,bcurves,derivatives,velocities,acc_pub,steer_rate_pub)
+        x_0[0]=0
+    plt.plot(x_,y_)
+    plt.scatter(points[:,0],points[:,1])
+    plt.show()
 
-x_0=np.array([[0],[points[0][0]],[points[0][1]],[1.5],[0],[0],[0],[0],[0]]) #assuming initially straight path
-x_=np.array([0])
-y_=np.array([0])
 rospy.init_node('control_node', anonymous=True)
 acc_pub = rospy.Publisher('acceleration', Float32, queue_size=10)
 steer_rate_pub = rospy.Publisher('steer_rate', Float32, queue_size=10)
 rate=rospy.Rate(10)
+#x_sub=rospy.Subscriber("x_c_vector",Float32MultiArray,x_callback)
+#y_sub=rospy.Subscriber("y_c_vector",Float32MultiArray,y_callback)
+path_sub=rospy.Subscriber("/A_star_path",Path,path_callback,x_0)
+rospy.spin()
+'''
 while not rospy.is_shutdown():
-    rospy.Subscriber("x_c",Float32,x_callback)
-    rospy.Subscriber("y_c",Float32,y_callback)
-    rospy.Subscriber("v_max",Float32,v_callback)
-    if len(x_dq)>=30 and len(y_dq)>=30:
-        x_0,x,y,v,xp,yp=move_forward(x_0,acc_pub,steer_rate_pub)
-        x_=vertcat(x_,x)
-        x_p.append(xp)
-        y_=vertcat(y_,y)
-        y_p.append(yp)
-    rate.sleep()
-plt.plot(x_,y_)
-plt.scatter(x_p,y_p)
-plt.show()
+    #rospy.Subscriber("v_max",Float32,v_callback)
+    if len(x_path) and len(y_path):
+        print(str(len(x_path))+" "+str(len(y_path)))
+        points=np.zeros((len(x_path),2))
+        velocities=np.zeros((len(x_path),1))
+        for i in range(len(x_path)):
+            points[i][0]=x_path[i]-x_path[0]
+            points[i][0]=y_path[i]-y_path[0]
+            velocities[i][0]=1.5
+        bcurves=trajectory_gen(points)
+        derivatives=derivative_list(points)
+        for i in range(len(points)-1):
+            (x_0,x_,y_,v)=control(x_0,i,x_,y_,v,points,bcurves,derivatives,velocities,acc_pub,steer_rate_pub)
+            x_0[0]=0
+        plt.plot(x_,y_)
+        plt.scatter(points[:,0],points[:,1])
+        plt.show()
+        rate.sleep()'''
+
 
 
 '''bcurves=trajectory_gen(points)

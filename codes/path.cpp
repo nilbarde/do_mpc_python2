@@ -9,6 +9,7 @@
 #include "ros/ros.h"
 #include "std_msgs/Header.h"
 #include "std_msgs/Float32.h"
+#include "std_msgs/Float32MultiArray.h"
 #include "geometry_msgs/PoseStamped.h"
 #include "nav_msgs/OccupancyGrid.h"
 #include "nav_msgs/Path.h"
@@ -19,6 +20,8 @@ float x_c=0;
 float y_c=0;
 vector<float> x_coordinates;
 vector<float> y_coordinates;
+std_msgs::Float32MultiArray msg_x;
+std_msgs::Float32MultiArray msg_y;
 /*void Callback(const nav_msgs::Path::ConstPtr& msg)
 {
   
@@ -57,8 +60,8 @@ public:
   SubscribeAndPublish()
   {
     //Topic you want to publish
-    x_pub = n.advertise<std_msgs::Float32>("x_c", 1);
-    y_pub = n.advertise<std_msgs::Float32>("y_c", 1);
+    x_pub = n.advertise<std_msgs::Float32MultiArray>("x_c_vector", 1);
+    y_pub = n.advertise<std_msgs::Float32MultiArray>("y_c_vector", 1);
 
     //Topic you want to subscribe
     sub = n.subscribe("/A_star_path", 1, &SubscribeAndPublish::callback, this);
@@ -70,16 +73,21 @@ public:
     
     x_coordinates.clear();
     y_coordinates.clear();
+    msg_x.data.clear();
+    msg_y.data.clear();
     int data = msg -> poses.size();
+
     for(int i=0; i<data; i++){
       y_c = msg->poses[i].pose.position.x;
       x_c = msg->poses[i].pose.position.y;
-      std_msgs::Float32 msg_x;
-      std_msgs::Float32 msg_y;
-      msg_x.data=x_c;
-      msg_y.data=y_c;
-      x_pub.publish(msg_x);
-      y_pub.publish(msg_y);
+      
+      msg_x.data.push_back(x_c);
+      msg_y.data.push_back(y_c);
+      if (msg_x.data.size()==20 and msg_y.data.size()==20){
+         x_pub.publish(msg_x);
+         y_pub.publish(msg_y);
+         msg_x.data.clear();
+         msg_y.data.clear();}
      //fstream fout;
      //fout.open("coordinates.csv",ios::out | ios::app);
      //fout<<x_c<<","<<y_c<<"\n";
@@ -89,6 +97,7 @@ public:
       y_coordinates.push_back(y_c);
       std::cout<<x_c<<' '<<y_c<<'\n';
     }
+   
     //system("python3 mpc.py");
   }
   }
